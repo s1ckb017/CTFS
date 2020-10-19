@@ -377,7 +377,7 @@ This comparison is in under our control, but let's see what happens then...
     0x0040fdcc     |     }
 ```
 
-*** NOTE ***
+***NOTE***
 sil represents the lower 16 bits of rsi.
 
 At this point in order to waste less time in debugging a weird code a fuzzing approach was used.
@@ -388,7 +388,7 @@ The fuzzer script is in `fuzzer.sh`.
 
 Using the fuzzer that weird code was uncovered.
 
-*** NOTE ***
+***NOTE***
 The fuzzer will store in a file the input that leads to a read(0, value != NULL, 0x18).
 This file could be used in debug mode with radare2 as standard input using `dor stdin=file.hex`.
 Then putting a breakpoint on ***0x00401bf2*** it's possible to see the weird code processing results.
@@ -445,6 +445,7 @@ $ rabin2 -l 3x17
 Ok, maybe a ROP could help...
 But it is needed to find where attach the ROP.
 
+***NOTE***
 The ROP (Return Oriented Programming) is an exploiting technique that exploits the existent code to bypass the NX protection.
 Chunks of the code (Gadgets) are chained together to create a code flow. The code flow is given by some initial conditions (registers value).
 What if we can write into the stack but not executing it? Well, it's possible to write on the return function the address of a gadget and on the
@@ -598,7 +599,7 @@ while true:
 Now the only problem is how to trigger the ROP execution, an idea could be to use the `LEAVE` assembly's instruction to
 change the stack and increment the new stack pointer.
 
-*** NOTE ***
+***NOTE***
 LEAVE: is an instruction used to exit from a function, basically it is used to restore the previous stack frame.
 Since when a function is called a new stack frame is created, when a function returns the stack frame must be destroyed.
 The previous frame pointer is stored in the register ***rbp***.
@@ -615,7 +616,7 @@ What if at ***0x004b40f0[16]*** there is the address of another gadget like `ins
 Yes it is executed and on the its `ret` the core tries to call the address at ***0x004b40f0[24]*** and so on.
 Theoretically a ROP chain is built.
 
-*** NOTE ***
+***NOTE***
 The LEAVE+RET gadget is the one that trigger the ROP so is the last one to insert in memory!
 
 The exploit at this point is very clear:
@@ -659,7 +660,7 @@ So the pseudo exploit now is:
 13. Write Addr 0x004b40f0
 14. Write LEAVE+RET gadget.
 
-*** NOTE ***
+***NOTE***
 It is important to notice that each gadget must end in a ret otherwise the next gadget is not executed!
 Of course if a gadget uses a `pop` the next gadget in the table is at current+16, since a pop increment the stack
 pointer and a ret too.
